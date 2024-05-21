@@ -16,55 +16,55 @@
  * 
  *
  * @export
- * @interface Provider
+ * @interface Group
  */
-export interface Provider {
+export interface Group {
 
     /**
      * @type {string}
-     * @memberof Provider
+     * @memberof Group
+     */
+    guid: string;
+
+    /**
+     * @type {string}
+     * @memberof Group
      */
     name: string;
 
     /**
-     * @type {number}
-     * @memberof Provider
+     * @type {string}
+     * @memberof Group
      */
-    order_index: number;
-
-    /**
-     * @type {boolean}
-     * @memberof Provider
-     */
-    enabled: boolean;
+    team: string;
 
     /**
      * @type {string}
-     * @memberof Provider
+     * @memberof Group
      */
-    client_id: string;
+    created_at: string;
+
+    /**
+     * @type {Array<string>}
+     * @memberof Group
+     */
+    access_to: Array<string>;
+
+    /**
+     * @type {Array<string>}
+     * @memberof Group
+     */
+    accessed_from: Array<string>;
 
     /**
      * @type {string}
-     * @memberof Provider
+     * @memberof Group
      */
-    client_secret: string;
+    note?: string | null;
 
     /**
      * @type {string}
-     * @memberof Provider
+     * @memberof Group
      */
-    authorization_endpoint: string;
-
-    /**
-     * @type {string}
-     * @memberof Provider
-     */
-    token_endpoint: string;
-
-    /**
-     * @type {string}
-     * @memberof Provider
-     */
-    userinfo_endpoint: string;
+    info: string;
 }

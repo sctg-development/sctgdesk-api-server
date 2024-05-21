@@ -12,36 +12,30 @@
  * Do not edit the class manually.
  */
 
-import { OidcDeviceInfo } from './oidc-device-info';
+import { Group } from './group';
  /**
  * 
  *
  * @export
- * @interface OidcAuthRequest
+ * @interface GroupsResponse
  */
-export interface OidcAuthRequest {
-
-    /**
-     * @type {OidcDeviceInfo}
-     * @memberof OidcAuthRequest
-     */
-    "deviceInfo": OidcDeviceInfo;
+export interface GroupsResponse {
 
     /**
      * @type {string}
-     * @memberof OidcAuthRequest
+     * @memberof GroupsResponse
      */
-    id: string;
+    msg: string;
 
     /**
-     * @type {string}
-     * @memberof OidcAuthRequest
+     * @type {number}
+     * @memberof GroupsResponse
      */
-    op: string;
+    total: number;
 
     /**
-     * @type {string}
-     * @memberof OidcAuthRequest
+     * @type {Array<Group>}
+     * @memberof GroupsResponse
      */
-    uuid: string;
+    data: Array<Group>;
 }

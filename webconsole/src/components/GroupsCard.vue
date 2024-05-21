@@ -17,18 +17,6 @@
                                         Name
                                     </th>
                                     <th
-                                        class="w-1/6 min-w-[160px] py-4 px-3 text-lg font-medium text-white lg:py-7 lg:px-4">
-                                        Email
-                                    </th>
-                                    <th
-                                        class="w-1/6 min-w-[160px] py-4 px-3 text-lg font-medium text-white lg:py-7 lg:px-4">
-                                        Status
-                                    </th>
-                                    <th
-                                        class="w-1/6 min-w-[160px] py-4 px-3 text-lg font-medium text-white lg:py-7 lg:px-4">
-                                        Admin
-                                    </th>
-                                    <th
                                         class="w-1/6 min-w-[160px] border-r border-transparent py-4 px-3 text-lg font-medium text-white lg:py-7 lg:px-4">
                                         Note
                                     </th>
@@ -51,11 +39,11 @@
                                                     class="absolute right-0 mt-2 w-56 origin-top-right divide-y divide-gray-100 rounded-md bg-white shadow-lg ring-1 ring-black/5 focus:outline-none">
                                                     <div class="px-1 py-1">
                                                         <MenuItem v-slot="{ active }">
-                                                        <button @click="toggle_add_user" :class="[
+                                                        <button @click="toggle_add_group" :class="[
                                                             active ? 'bg-slate-400 text-white' : 'text-gray-900',
                                                             'group flex w-full items-center rounded-md px-2 py-2 text-sm',
                                                         ]">
-                                                            Add user
+                                                            Add group
                                                         </button>
                                                         </MenuItem>
                                                     </div>
@@ -66,30 +54,18 @@
                                 </tr>
                             </thead>
                             <tbody>
-                                <tr v-for="user in users" :key="user.guid">
+                                <tr v-for="group in groups" :key="group.guid">
                                     <td
                                         class="text-dark border-b border-l border-[#E8E8E8] bg-[#F3F6FF] dark:bg-dark-3 dark:border-dark dark:text-dark-7 py-5 px-2 text-center text-base font-medium">
-                                        {{ user.guid }}
+                                        {{ group.guid }}
                                     </td>
                                     <td
                                         class="text-dark border-b border-[#E8E8E8] bg-white dark:border-dark dark:bg-dark-2 dark:text-dark-7 py-5 px-2 text-center text-base font-medium">
-                                        {{ user.name }}
-                                    </td>
-                                    <td
-                                        class="text-dark border-b border-[#E8E8E8] bg-[#F3F6FF] dark:bg-dark-3 dark:border-dark dark:text-dark-7 py-5 px-2 text-center text-base font-medium">
-                                        {{ user.email }}
-                                    </td>
-                                    <td
-                                        class="text-dark border-b border-[#E8E8E8] bg-white dark:border-dark dark:bg-dark-2 dark:text-dark-7 py-5 px-2 text-center text-base font-medium">
-                                        {{ user.status }}
-                                    </td>
-                                    <td
-                                        class="text-dark border-b border-[#E8E8E8] bg-[#F3F6FF] dark:bg-dark-3 dark:border-dark dark:text-dark-7 py-5 px-2 text-center text-base font-medium">
-                                        {{ user.is_admin ? 'Yes' : 'No' }}
+                                        {{ group.name }}
                                     </td>
                                     <td
                                         class="text-dark border-b border-[#E8E8E8] bg-white dark:bg-dark-3 dark:border-dark dark:text-dark-7 py-5 px-2 text-center text-base font-medium">
-                                        {{ user.note }}
+                                        {{ group.note }}
                                     </td>
                                     <td
                                         class="text-dark border-b border-r border-[#E8E8E8] bg-[#F3F6FF] dark:border-dark dark:bg-dark-2 dark:text-dark-7 py-5 px-2 text-center text-base font-medium">
@@ -107,60 +83,23 @@
         </div>
     </section>
     <!-- ====== Table Section End -->
-    <AddUser @add_user_close="toggle_add_user" @user_added="refresh_users" v-if="bModalAddUser"/>
 </template>
 <script setup lang="ts">
 import { Menu, MenuButton, MenuItem, MenuItems } from '@headlessui/vue'
-import { UserApi, UserListResponse } from '@/api';
 import { useUserStore } from '@/stores/sctgDeskStore';
 import { onMounted, ref } from 'vue';
-import AddUser from '@/components/AddUser.vue';
+import { GroupApi, Group } from '@/api';
 
 const userStore = useUserStore();
-const users = ref([] as UserListResponse[]);
-const bModalAddUser = ref(false);
-
+const groups = ref([] as Group[]);
+const groupApi = new GroupApi(userStore.api_configuration);
 onMounted(() => {
-    getUsers().then((data) => {
-        users.value = data;
+    groupApi.groups(1,4294967295).then((response) => {
+        groups.value = response.data.data;
     });
 });
 
-/**
- * Toggles the value of `bModalAddUser` between `true` and `false`.
- *
- * @return {void} This function does not return anything.
- */
-function toggle_add_user() {
-    bModalAddUser.value = !bModalAddUser.value;
-}
-
-/**
- * Retrieves the list of users from the API.
- *
- * @return {Promise<UserListResponse[]>} A promise that resolves to the list of users.
- */
-function getUsers(): Promise<UserListResponse[]> {
-    const userApi = new UserApi(userStore.api_configuration);
-    return new Promise<UserListResponse[]>((resolve, reject) => {
-        //userApi.usersClient();
-        userApi.usersClient(1, 4294967295).then((response) => {
-            if (response.status == 200 && response.data.msg == "success") {
-                resolve(response.data.data);
-            }
-            else {
-                resolve([] as UserListResponse[]);
-            }
-        }).catch((error) => {
-            console.error(error);
-            resolve([] as UserListResponse[]);
-        });
-    });
-}
-
-function refresh_users() {
-    getUsers().then((data) => {
-        users.value = data;
-    });
+function toggle_add_group() {
+    console.log('toggle_add_group');
 }
 </script>
