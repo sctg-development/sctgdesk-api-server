@@ -2014,7 +2014,7 @@ async fn software(key: &str) -> Result<Json<SoftwareResponse>, status::NotFound<
 #[get("/api/software/version/server", format = "application/json")]
 async fn software_version() -> Json<SoftwareVersionResponse> {
     log::debug!("software_version");
-    let version = env::var("MAIN_PKG_VERSION").unwrap();
+    let version = env::var("MAIN_PKG_VERSION").unwrap_or_else(|_| env!("CARGO_PKG_VERSION").to_string());
     let response = SoftwareVersionResponse {
         server: Some(version),
         client: Some(extract_version().await.unwrap_or("0.0.0".to_string())),
