@@ -248,7 +248,7 @@ if you want a ready to use integrated server with Rustdesk-Server, you can use m
 ## Limitations
 
 * The server is not yet ready for production use. Buy a [Rustdesk-server-pro](https://rustdesk.com/pricing.html) license to get a production-ready server.  
-* The Bearen tokens are stored in memory without persistence. It means that each time the server is restarted, all the tokens are lost. You will need to re-authenticate with the server.  
+* The Bearer tokens are kept in memory and persisted in the `session_token` table of `db_v2.sqlite3`, so a restart of the server does not log clients out. Tokens never expire on their own: they are removed on logout, when the user is deleted or disabled, or when the row is deleted from the table.  
 
 ## CLI Usage
 

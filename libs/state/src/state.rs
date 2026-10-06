@@ -90,7 +90,7 @@ fn secs_from_epoch() -> u64 {
 impl ApiState {
     pub async fn new_with_db<P: AsRef<Path>>(db_filename: P) -> Self {
         let db = Database::open(db_filename).await;
-        Self {
+        let state = Self {
             last_maintenance_time: AtomicU64::new(0),
             access_tokens: Default::default(),
             sessions: Default::default(),
@@ -99,7 +99,44 @@ impl ApiState {
             db,
             oidc_sessions: Default::default(),
             oauth2_providers: Default::default(),
+        };
+        state.restore_sessions().await;
+        state
+    }
+
+    /// Rebuild the in-memory session state from the tokens persisted in the
+    /// database, so that clients stay logged in across a restart.
+    ///
+    /// Tokens of users that have been disabled in the meantime are dropped.
+    async fn restore_sessions(&self) {
+        let mut restored = 0usize;
+        for db_token in self.db.get_session_tokens().await {
+            let token = match Token::from_bytes(&db_token.token) {
+                Some(token) => token,
+                None => {
+                    log::warn!("restore_sessions: dropping malformed token");
+                    let _ = self.db.delete_session_token(&db_token.token).await;
+                    continue;
+                }
+            };
+            if !db_token.user_info.active {
+                log::debug!(
+                    "restore_sessions: dropping token of inactive user {}",
+                    db_token.username
+                );
+                let _ = self.db.delete_session_token(&db_token.token).await;
+                continue;
+            }
+            self.register_access_token(
+                token,
+                db_token.user_id,
+                &db_token.username,
+                db_token.user_info.admin,
+            )
+            .await;
+            restored += 1;
         }
+        log::info!("restored {} session token(s) from the database", restored);
     }
 
     pub async fn maintenance_flush_address_books(&self) {
@@ -192,9 +229,29 @@ impl ApiState {
         ))
     }
 
+    /// Issue a new bearer token for the user, register it in memory and
+    /// persist it so that it survives a restart of the server.
     async fn get_access_token(&self, user_id: Vec<u8>, username: &String, is_admin: bool) -> Token {
         let access_token = Token::new_random();
 
+        let _ = self
+            .db
+            .insert_session_token(access_token.as_bytes(), &user_id)
+            .await;
+
+        self.register_access_token(access_token, user_id, username, is_admin)
+            .await;
+        access_token
+    }
+
+    /// Register an already known bearer token in the in-memory state.
+    async fn register_access_token(
+        &self,
+        access_token: Token,
+        user_id: Vec<u8>,
+        username: &String,
+        is_admin: bool,
+    ) {
         let mut state_access_tokens = self.access_tokens.write().await;
         let mut state_sessions = self.sessions.write().await;
         let mut state_users = self.users.write().await;
@@ -228,8 +285,7 @@ impl ApiState {
         };
 
         let _ = state_sessions.sessions.insert(session_id, session_info);
-        let _ = state_access_tokens.insert(access_token.clone(), access_token_info);
-        access_token
+        let _ = state_access_tokens.insert(access_token, access_token_info);
     }
 
     pub async fn find_session(&self, access_token: &Token) -> Option<AccessTokenInfo> {
@@ -327,6 +383,11 @@ impl ApiState {
 
         state_sessions.sessions.remove(&user.session_id);
         state_access_tokens.remove(&user.access_token);
+
+        let _ = self
+            .db
+            .delete_session_token(user.access_token.as_bytes())
+            .await;
 
         Some(())
     }
@@ -730,5 +791,82 @@ impl ApiState {
     }
     pub async fn update_shared_address_book(&self, guid: &str, name: &str) -> Option<()> {
         self.db.update_shared_address_book(guid, name).await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn temp_db(name: &str) -> std::path::PathBuf {
+        let mut path = std::env::temp_dir();
+        path.push(format!("sctgdesk-{}-{}.sqlite3", name, std::process::id()));
+        let _ = std::fs::remove_file(&path);
+        path
+    }
+
+    async fn login_admin(state: &ApiState) -> Token {
+        let (_, token) = state
+            .user_login(
+                &"admin".to_string(),
+                UserPasswordInfo::from_password("Hello,world!"),
+                false,
+            )
+            .await
+            .expect("default admin login must succeed");
+        token
+    }
+
+    #[tokio::test]
+    async fn token_survives_restart() {
+        let db = temp_db("restart");
+
+        let state = ApiState::new_with_db(&db).await;
+        let token = login_admin(&state).await;
+        assert!(state.find_session(&token).await.is_some());
+        drop(state);
+
+        // simulate a restart of the server: a fresh state on the same database
+        let state = ApiState::new_with_db(&db).await;
+        let session = state
+            .find_session(&token)
+            .await
+            .expect("token must be restored from the database");
+        let info = AuthenticatedUserInfo {
+            session_id: session.session_id,
+            user_id: session.user_id,
+            access_token: token,
+        };
+        assert_eq!(
+            state.get_current_user_name(&info).await.as_deref(),
+            Some("admin")
+        );
+        assert_eq!(state.is_current_user_admin(&info).await, Some(true));
+
+        // logout removes the token for good
+        state.user_logout(&info).await.expect("logout");
+        drop(state);
+        let state = ApiState::new_with_db(&db).await;
+        assert!(state.find_session(&token).await.is_none());
+    }
+
+    #[tokio::test]
+    async fn token_of_disabled_user_is_not_restored() {
+        let db = temp_db("disabled");
+
+        let state = ApiState::new_with_db(&db).await;
+        let token = login_admin(&state).await;
+        // default admin guid from db_v2/create/db.sql
+        let admin_uuid = "018f2556-2301-79eb-91a2-cffe5ced4236";
+        // the second argument is written straight into user.status, and the
+        // web console passes `activate` in it: false disables the user
+        state
+            .user_change_status(admin_uuid, false)
+            .await
+            .expect("disable");
+        drop(state);
+
+        let state = ApiState::new_with_db(&db).await;
+        assert!(state.find_session(&token).await.is_none());
     }
 }

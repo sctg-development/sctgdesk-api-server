@@ -48,9 +48,20 @@ pub struct DatabaseConnection {
     conn: PoolConnection<Sqlite>,
 }
 
+#[derive(Debug)]
 pub struct DatabaseUserInfo {
     pub active: bool,
     pub admin: bool,
+}
+
+/// A bearer token persisted in the `session_token` table, joined with the
+/// user it belongs to. Used to rebuild the in-memory session state on startup.
+#[derive(Debug)]
+pub struct DatabaseSessionToken {
+    pub token: Vec<u8>,
+    pub user_id: UserId,
+    pub username: String,
+    pub user_info: DatabaseUserInfo,
 }
 
 #[derive(Serialize, Debug)]
@@ -116,6 +127,117 @@ impl Database {
             .await
             .unwrap();
         // Load and run migrations
+    }
+
+    /// Persist a freshly issued bearer token for `user_id`.
+    pub async fn insert_session_token(&self, token: &[u8], user_id: &UserId) -> Option<()> {
+        let mut conn = self.pool.acquire().await.ok()?;
+        let res = sqlx::query!(
+            r#"
+            INSERT OR REPLACE INTO session_token(token, "user") VALUES (?, ?)
+            "#,
+            token,
+            user_id
+        )
+        .execute(&mut *conn)
+        .await;
+        if let Err(e) = res {
+            log::error!("insert_session_token error: {:?}", e);
+            return None;
+        }
+        Some(())
+    }
+
+    /// Remove a bearer token (logout).
+    pub async fn delete_session_token(&self, token: &[u8]) -> Option<()> {
+        let mut conn = self.pool.acquire().await.ok()?;
+        let res = sqlx::query!(
+            r#"
+            DELETE FROM session_token WHERE token = ?
+            "#,
+            token
+        )
+        .execute(&mut *conn)
+        .await;
+        if let Err(e) = res {
+            log::error!("delete_session_token error: {:?}", e);
+            return None;
+        }
+        Some(())
+    }
+
+    /// Remove every bearer token of a user (user deleted or disabled).
+    pub async fn delete_session_tokens_for_user(&self, user_id: &UserId) -> Option<()> {
+        let mut conn = self.pool.acquire().await.ok()?;
+        let res = sqlx::query!(
+            r#"
+            DELETE FROM session_token WHERE "user" = ?
+            "#,
+            user_id
+        )
+        .execute(&mut *conn)
+        .await;
+        if let Err(e) = res {
+            log::error!("delete_session_tokens_for_user error: {:?}", e);
+            return None;
+        }
+        Some(())
+    }
+
+    /// Load every persisted bearer token together with its user.
+    /// Tokens whose user no longer exists are dropped from the table first.
+    pub async fn get_session_tokens(&self) -> Vec<DatabaseSessionToken> {
+        let mut conn = match self.pool.acquire().await {
+            Ok(conn) => conn,
+            Err(e) => {
+                log::error!("get_session_tokens error: {:?}", e);
+                return vec![];
+            }
+        };
+        let res = sqlx::query!(
+            r#"
+            DELETE FROM session_token WHERE "user" NOT IN (SELECT guid FROM user)
+            "#
+        )
+        .execute(&mut *conn)
+        .await;
+        if let Err(e) = res {
+            log::error!("get_session_tokens cleanup error: {:?}", e);
+        }
+        let res = sqlx::query!(
+            r#"
+            SELECT
+                session_token.token as "token!: Vec<u8>",
+                user.guid as "guid!: Vec<u8>",
+                user.name,
+                user.status,
+                user.role
+            FROM
+                session_token
+            INNER JOIN user ON user.guid = session_token."user"
+            ORDER BY session_token.created_at
+            "#
+        )
+        .fetch_all(&mut *conn)
+        .await;
+        match res {
+            Ok(rows) => rows
+                .into_iter()
+                .map(|row| DatabaseSessionToken {
+                    token: row.token,
+                    user_id: row.guid,
+                    username: row.name,
+                    user_info: DatabaseUserInfo {
+                        active: row.status == 1,
+                        admin: row.role == 1,
+                    },
+                })
+                .collect(),
+            Err(e) => {
+                log::error!("get_session_tokens error: {:?}", e);
+                vec![]
+            }
+        }
     }
 
     pub async fn find_user_by_name(
@@ -483,7 +605,12 @@ impl Database {
                 ab
             WHERE
                 owner = ?;
+            DELETE FROM
+                session_token
+            WHERE
+                "user" = ?;
         "#,
+            user_id,
             user_id,
             user_id,
             user_id
@@ -1104,6 +1231,11 @@ impl Database {
         if res.is_err() {
             log::error!("change_user_status error: {:?}", res);
             return None;
+        }
+        if status != 1 {
+            // user disabled: revoke its persisted tokens so they are not
+            // restored on the next start
+            let _ = self.delete_session_tokens_for_user(&guid).await;
         }
         Some(())
     }
