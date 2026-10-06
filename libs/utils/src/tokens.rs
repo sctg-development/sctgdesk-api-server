@@ -35,6 +35,22 @@ impl Token {
         BASE64_URL_SAFE_NO_PAD.encode(&self.0)
     }
 
+    /// Raw token bytes, used to persist the token in the database.
+    pub fn as_bytes(&self) -> &[u8] {
+        &self.0
+    }
+
+    /// Rebuild a token from raw bytes read back from the database.
+    /// Returns `None` if the slice does not have the expected length.
+    pub fn from_bytes(bytes: &[u8]) -> Option<Self> {
+        if bytes.len() != TOKEN_LENGTH {
+            return None;
+        }
+        let mut buf = [0u8; TOKEN_LENGTH];
+        buf.copy_from_slice(bytes);
+        Some(Self(buf))
+    }
+
     pub fn from_str<S: AsRef<str>>(str: S) -> Result<Self, base64::DecodeError> {
         let bytes = BASE64_URL_SAFE_NO_PAD.decode(str.as_ref()).unwrap();
         let mut buf = [0u8; TOKEN_LENGTH];

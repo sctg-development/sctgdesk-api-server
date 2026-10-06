@@ -56,6 +56,14 @@ CREATE TABLE IF NOT EXISTS peer (
                                     region text null,
                                     strategy blob, 
                                     info JSON not null DEFAULT '{}', "last_online" datetime not null default('2011-11-16 11:55:19')) without rowid;
+-- Bearer tokens handed out by /api/login and the OIDC flow. Persisted so that
+-- clients stay logged in across restarts of the API server.
+CREATE TABLE IF NOT EXISTS "session_token" (
+                                    token blob primary key not null,
+                                    "user" blob not null,
+                                    created_at datetime not null default(current_timestamp)
+                                ) without rowid;
+CREATE INDEX IF NOT EXISTS session_token_user ON session_token("user");
 CREATE TABLE IF NOT EXISTS "user" (
                                     guid blob primary key not null,
                                     name varchar(100) not null,
