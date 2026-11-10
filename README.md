@@ -1,3 +1,8 @@
+> [!IMPORTANT]
+> **This repository is no longer maintained: SCTGDesk now lives in [sctg-development/sctgdesk-server](https://github.com/sctg-development/sctgdesk-server)** (RustDesk-compatible server, API server, web console and clients in one repository). Please use it for downloads, documentation, issues and pull requests.
+>
+> **Ce dépôt n’est plus maintenu : SCTGDesk est désormais dans [sctg-development/sctgdesk-server](https://github.com/sctg-development/sctgdesk-server)** (serveur compatible RustDesk, serveur d’API, console web et clients dans un seul dépôt). Merci de l’utiliser pour les téléchargements, la documentation, les tickets et les pull requests.
+
 * Integrated server: [![Full server](https://github.com/sctg-development/sctgdesk-server/actions/workflows/multiarch-docker-hub.yml/badge.svg)](https://github.com/sctg-development/sctgdesk-server/actions/workflows/multiarch-docker-hub.yml)  
 * Standalone nightly build: [![Build and Deploy](https://github.com/sctg-development/sctgdesk-api-server/actions/workflows/build.yaml/badge.svg)](https://github.com/sctg-development/sctgdesk-api-server/actions/workflows/build.yaml)
 
